@@ -1,6 +1,6 @@
 plugins {
     id 'java'
-    id 'org.springframework.boot' version '3.4.0'
+    id 'org.springframework.boot' version '3.3.5'
     id 'io.spring.dependency-management' version '1.1.6'
 }
 
@@ -18,19 +18,28 @@ repositories {
 }
 
 dependencies {
-
+    // Lombok annotation processor
     annotationProcessor 'org.projectlombok:lombok:1.18.28'
-    implementation 'com.amazonaws:aws-java-sdk-s3:1.12.566'
+
+    // AWS dependencies
+    implementation 'com.amazonaws:aws-java-sdk-s3:1.12.777'
     implementation 'software.amazon.awssdk:s3:2.20.92'
     implementation 'org.springframework.cloud:spring-cloud-starter-aws:2.2.6.RELEASE'
-    implementation 'org.springframework.boot:spring-boot-starter'
-    implementation 'org.projectlombok:lombok:1.18.28'
-    runtimeOnly 'com.mysql:mysql-connector-j'
-    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+
+    // Spring Boot dependencies
     implementation 'org.springframework.boot:spring-boot-starter'
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
-    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'com.fasterxml.jackson.core:jackson-core:2.15.2' // 안정적인 최신 버전
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.15.2'
+    implementation 'com.fasterxml.jackson.core:jackson-annotations:2.15.2'
+    // Lombok
+    implementation 'org.projectlombok:lombok:1.18.36'
+
+    // MySQL Connector with explicit version
+    runtimeOnly 'mysql:mysql-connector-java:8.0.33' // MySQL Connector 최신 버전
+
+    implementation 'org.springframework.boot:spring-boot-starter'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
