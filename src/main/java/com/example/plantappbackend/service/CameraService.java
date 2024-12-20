@@ -27,8 +27,8 @@ import java.util.Map;
 @Service
 public class CameraService {
 
-    private static final long MAX_IMAGE_SIZE = 1024 * 1024; // 최대 이미지 크기 1MB
-    private static final float MIN_QUALITY = 0.1f; // 최소 이미지 품질
+    private static final long MAX_IMAGE_SIZE = 1024 * 1024; // 이미지 최대 크기 1MB
+    private final AwsS3Service awsS3Service;
 
     @Autowired
     private RestTemplate restTemplate;
@@ -36,69 +36,67 @@ public class CameraService {
     @Value("${openai.api.key}")
     private String openAiApiKey;
 
-    /**
-     * 이미지를 반복적으로 압축하여 최대 크기 제한 아래로 줄입니다.
-     */
+    @Autowired
+    public CameraService(AwsS3Service awsS3Service) {
+        this.awsS3Service = awsS3Service;
+    }
+
+    // 이미지 크기 확인 및 반복 압축
     private byte[] compressImageUntilBelowLimit(byte[] imageBytes) {
         try {
-            float quality = 0.8f; // 초기 품질 설정
+            float quality = 0.8f; // 초기 압축 품질
             BufferedImage originalImage = ImageIO.read(new ByteArrayInputStream(imageBytes));
 
             while (imageBytes.length > MAX_IMAGE_SIZE) {
                 ByteArrayOutputStream compressedOutputStream = new ByteArrayOutputStream();
 
                 Iterator<ImageWriter> writers = ImageIO.getImageWritersByFormatName("jpg");
-                if (!writers.hasNext()) {
-                    throw new IOException("JPEG 포맷의 ImageWriter를 찾을 수 없습니다.");
-                }
                 ImageWriter writer = writers.next();
 
-                try (ImageOutputStream outputStream = ImageIO.createImageOutputStream(compressedOutputStream)) {
-                    writer.setOutput(outputStream);
+                ImageOutputStream outputStream = ImageIO.createImageOutputStream(compressedOutputStream);
+                writer.setOutput(outputStream);
 
-                    ImageWriteParam params = writer.getDefaultWriteParam();
-                    params.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
-                    params.setCompressionQuality(quality);
+                ImageWriteParam params = writer.getDefaultWriteParam();
+                params.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
+                params.setCompressionQuality(quality);
 
-                    writer.write(null, new javax.imageio.IIOImage(originalImage, null, null), params);
-                } finally {
-                    writer.dispose();
-                }
+                writer.write(null, new javax.imageio.IIOImage(originalImage, null, null), params);
+
+                outputStream.close();
+                writer.dispose();
 
                 imageBytes = compressedOutputStream.toByteArray();
+
                 System.out.println("압축 후 이미지 크기: " + imageBytes.length / 1024 + "KB");
 
+                // 품질 감소
                 quality -= 0.1f;
-                if (quality < MIN_QUALITY) {
-                    throw new IOException("최소 품질로 압축해도 크기를 줄일 수 없습니다.");
+                if (quality < 0.1f) {
+                    throw new IllegalArgumentException("이미지 압축 품질을 낮췄음에도 크기를 줄일 수 없습니다.");
                 }
             }
             return imageBytes;
         } catch (IOException e) {
-            throw new RuntimeException("이미지 압축 중 오류 발생: " + e.getMessage(), e);
+            throw new RuntimeException("이미지 압축 중 오류 발생", e);
         }
     }
 
-    /**
-     * 이미지 크기 확인 및 필요 시 압축 실행.
-     */
+    // 이미지 크기 확인 후 압축 실행
     private byte[] validateAndCompressImage(MultipartFile image) {
         try {
             byte[] imageBytes = image.getBytes();
             if (imageBytes.length > MAX_IMAGE_SIZE) {
                 System.out.println("이미지 크기가 1MB를 초과하여 압축합니다.");
-                return compressImageUntilBelowLimit(imageBytes);
+                imageBytes = compressImageUntilBelowLimit(imageBytes);
             }
             return imageBytes;
         } catch (IOException e) {
-            throw new RuntimeException("이미지 처리 중 오류 발생: " + e.getMessage(), e);
+            throw new RuntimeException("이미지 처리 중 오류 발생", e);
         }
     }
 
-    /**
-     * OpenAI GPT API 호출.
-     */
-    private Map<String, String> callGptApi(List<Map<String, Object>> messages) throws IOException {
+    // GPT API 호출
+    private Map<String, String> callGptApi(String base64Image, List<Map<String, Object>> messages) throws IOException {
         String gptEndpoint = "https://api.openai.com/v1/chat/completions";
 
         HttpHeaders headers = new HttpHeaders();
@@ -106,12 +104,18 @@ public class CameraService {
         headers.setContentType(MediaType.APPLICATION_JSON);
 
         Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("model", "gpt-4");
+        requestBody.put("model", "gpt-4o");
         requestBody.put("messages", messages);
         requestBody.put("temperature", 0.0);
 
+        // 요청 데이터 로그 출력
+        System.out.println("GPT 요청 데이터: " + requestBody);
+
         HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(requestBody, headers);
         ResponseEntity<Map> response = restTemplate.postForEntity(gptEndpoint, requestEntity, Map.class);
+
+        // 응답 데이터 로그 출력
+        System.out.println("GPT 응답 데이터: " + response.getBody());
 
         Map responseBody = response.getBody();
         if (responseBody != null && responseBody.containsKey("choices")) {
@@ -120,63 +124,70 @@ public class CameraService {
                 Map choice = choices.get(0);
                 Map message = (Map) choice.get("message");
                 if (message != null && message.containsKey("content")) {
-                    return parseResponseContent((String) message.get("content"));
+                    String content = (String) message.get("content");
+                    return parseResponseContent(content);
                 }
             }
         }
         return Map.of("name", "식별 실패", "status", "분석 실패");
     }
 
-    /**
-     * 식물 분석 요청 로직.
-     */
+    // 식물 분석 공통 로직
     private Map<String, String> detectPlant(MultipartFile image, String systemPrompt, String userPrompt) {
         try {
-            // 이미지 압축 및 Base64 변환
+            // 이미지 압축 및 검증
             byte[] compressedImage = validateAndCompressImage(image);
-            String base64Image = Base64.encodeBase64String(compressedImage);
+            // 이미지 업로드 후 URL 가져오기
+            String fileUrl = awsS3Service.uploadFile(image);
+            // Base64 인코딩된 이미지 생성
+            String base64Image = "data:image/jpeg;base64," + Base64.encodeBase64String(compressedImage);
 
             // GPT 메시지 생성
             List<Map<String, Object>> messages = List.of(
                     Map.of("role", "system", "content", systemPrompt),
-                    Map.of("role", "user", "content", userPrompt + "\n[이미지 데이터: " + base64Image.substring(0, 50) + "...]")
+                    Map.of("role", "user", "content", List.of(
+                            Map.of("type", "text", "text", userPrompt),
+                            Map.of("type", "image_url", "image_url", Map.of("url", base64Image))
+                    ))
             );
 
-            // API 호출
-            return callGptApi(messages);
+            // GPT API 호출
+            Map<String, String> gptResult = callGptApi(base64Image, messages);
+
+            // 결과에 S3 URL 추가
+            Map<String, String> result = new HashMap<>(gptResult);
+            result.put("imageUrl", fileUrl);
+
+            return result;
+
         } catch (Exception e) {
             e.printStackTrace();
             return Map.of("error", "처리 중 오류 발생: " + e.getMessage());
         }
     }
-
-    /**
-     * 식물 이름만 요청.
-     */
-    public Map<String, String> detectPlantName(MultipartFile image) {
-        return detectPlant(image,
-                "당신은 식물의 이름을 명확하게 알려주는 도우미입니다. 응답은 '이름: [식물 이름]' 형식으로 제공하세요.",
-                "이 이미지는 식물입니다. 반드시 식물의 이름을 알려주세요.");
-    }
-
-    /**
-     * 식물 이름과 상태 요청.
-     */
+    // 식물 이름 및 상태 요청
     public Map<String, String> detectPlantNameAndStatus(MultipartFile image) {
         return detectPlant(image,
-                "당신은 식물의 이름, 상태 및 대처법을 알려주는 도우미입니다. 다음 형식을 따르세요:\n" +
-                        "이름: [식물 이름]\n상태: [식물 상태]\n대처법: [대처 방법]",
-                "이 이미지는 식물입니다. 이름, 상태 및 대처법을 알려주세요.");
+                "당신은 식물의 이름, 상태, 질병 여부 및 대처법을 알려주는 친절한 도우미입니다. 대답은 아래 형식을 따르세요:\n"
+                        + "이름: [이 식물은 ~로 보입니다.]\n"
+                        + "상태: [식물 상태]\n"
+                        + "대처법: [친절한 말투로 설명한 대처 방법]",
+                "이 이미지는 식물입니다. 식물의 이름과 상태를 분석하여 아래 형식에 맞춰 알려주세요:\n"
+                        + "- 상태는 색상, 잎 모양, 손상 여부 등 자세히 작성해주세요.\n"
+                        + "- 대처법은 시각장애인을 위한 앱이므로, 간결하면서도 친절한 말투로 작성해주세요.\n"
+                        + "- 대답은 꼭 다음 형식을 지켜주세요:\n"
+                        + "이름: [이 식물은 ~로 보입니다.]\n"
+                        + "상태: [상태 설명]\n"
+                        + "대처법: [친절한 말투로 대처법]");
     }
 
-    /**
-     * GPT 응답 파싱.
-     */
+    // GPT 응답 파싱
     private Map<String, String> parseResponseContent(String content) {
         String name = "이름 정보 없음";
         String status = "상태 정보 없음";
         String remedy = "대처법 정보 없음";
 
+        // 각 줄을 "\n" 기준으로 분리
         String[] lines = content.split("\n");
         for (String line : lines) {
             line = line.trim();
@@ -189,10 +200,10 @@ public class CameraService {
             }
         }
 
+        // 결과 반환
         return Map.of(
                 "name", name,
                 "status", status,
                 "remedy", remedy
         );
-    }
-}
+    }}

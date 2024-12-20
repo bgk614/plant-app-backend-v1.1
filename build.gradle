@@ -37,7 +37,7 @@ dependencies {
     implementation 'org.projectlombok:lombok:1.18.36'
 
     // MySQL Connector with explicit version
-    runtimeOnly 'mysql:mysql-connector-java:8.0.33' // MySQL Connector 최신 버전
+    runtimeOnly 'mysql:mysql-connector-java:8.3' // MySQL Connector 최신 버전
 
     implementation 'org.springframework.boot:spring-boot-starter'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'

@@ -4,7 +4,6 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
@@ -16,31 +15,21 @@ public class Plant {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne
-    @JoinColumn(name = "user_id", nullable = false) // User와의 관계 (외래키)
-    private User user;
-
-    @Column(nullable = false)
+    @Column
     private String name;
 
-    @Column(nullable = false)
-    private String nickname;
+    @Column
+    private String remedy;
+
+    @Column
+    private String status;
 
     @Column(name = "image_url")
     private String imageUrl;
 
-    @Column(name = "water_interval")
-    private Integer waterInterval;
+    @Column(name = "user_uuid")
+    private String userUuid;
 
-    @Column(name = "last_watered_date")
-    private LocalDate lastWateredDate;
-
-    @Column(name = "characteristics")
-    private String characteristics;
-
-    @Column(name = "created_at", updatable = false)
+    @Column(name = "created_at")
     private LocalDateTime createdAt = LocalDateTime.now();
-
-    @Transient
-    private String userUuid; // 요청 시 사용 (DB에는 저장하지 않음)
 }
