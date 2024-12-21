@@ -14,6 +14,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 @RestController
+@CrossOrigin(origins = "*")
 @RequestMapping("/api")
 public class CameraController {
 
@@ -25,6 +26,7 @@ public class CameraController {
     }
 
     // 새로운 식물 카메라 촬영할 때 (데이터 저장 없이, 결과값만 반환)
+    @CrossOrigin(origins = "*")
     @PostMapping("/camera")
     public ResponseEntity<?> detectPlantNameAndStatus(@RequestParam("image") MultipartFile image) {
         try {
