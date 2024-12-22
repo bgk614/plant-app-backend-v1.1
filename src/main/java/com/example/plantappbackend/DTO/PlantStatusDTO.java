@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 @Getter
 @Setter
 public class PlantStatusDTO {
-    private Long id;
+    private Long statusId;
     private String status;
     private String remedy;
     private String imageUrl;

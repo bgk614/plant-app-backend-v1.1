@@ -54,6 +54,7 @@ public class PlantStatusController {
 
                // 4. PlantStatus 엔티티 생성 및 저장
                PlantStatus plantStatus = new PlantStatus();
+               plantStatus.setId(plantId);
                plantStatus.setPlant(plant); // 참조된 Plant 설정
                plantStatus.setImageUrl(imageUrl);
                plantStatus.setStatus(status);
@@ -71,7 +72,12 @@ public class PlantStatusController {
      @DeleteMapping("/delete/status/{statusId}")
      public ResponseEntity<?> deletePlantStatus(@PathVariable Long statusId) {
           try {
-               // 상태 삭제 서비스 호출
+               // 첫 번째 기록인지 확인
+               if (plantStatusService.isFirstRecord(statusId)) {
+                    return ResponseEntity.badRequest().body(Map.of("message", "첫 번째 기록은 삭제할 수 없습니다."));
+               }
+
+               // 상태 삭제
                plantStatusService.deletePlantStatusById(statusId);
                return ResponseEntity.ok(Map.of("message", "성공적으로 삭제되었습니다."));
           } catch (Exception e) {

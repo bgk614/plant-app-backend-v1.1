@@ -1,6 +1,5 @@
 package com.example.plantappbackend.controller;
 
-import com.example.plantappbackend.DTO.PlantDTO;
 import com.example.plantappbackend.DTO.PlantDTOWithRecentStatus;
 import com.example.plantappbackend.DTO.PlantStatusDTO;
 import com.example.plantappbackend.model.Plant;
@@ -91,7 +90,7 @@ public class PlantController {
             List<PlantStatusDTO> statusDTOs = statuses.stream()
                     .map(status -> {
                         PlantStatusDTO dto = new PlantStatusDTO();
-                        dto.setId(status.getId());
+                        dto.setStatusId(status.getId());
                         dto.setStatus(status.getStatus());
                         dto.setRemedy(status.getRemedy());
                         dto.setImageUrl(status.getImageUrl());
@@ -127,6 +126,30 @@ public class PlantController {
             return ResponseEntity.ok(Map.of("message", "성공적으로 삭제되었습니다."));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("message", "삭제 중 오류가 발생했습니다.", "error", e.getMessage()));
+        }
+    }
+
+    // 특정 식물 정보 수정
+    @PutMapping("/update/{plantId}")
+    public ResponseEntity<?> updatePlantById(@PathVariable Long plantId, @RequestBody Map<String, Object> requestData) {
+        try {
+            // 수정 요청 데이터 추출
+            String plantNickname = (String) requestData.get("nickname");
+            String plantName = (String) requestData.get("name");
+            Integer checkDateInterval = (Integer) requestData.get("checkDateInterval");
+
+            // 서비스 호출하여 식물 정보 수정
+            boolean updated = plantService.updatePlantById(plantId, plantNickname, plantName, checkDateInterval);
+
+            if (!updated) {
+                return ResponseEntity.status(404).body(Map.of("message", "해당 ID의 식물을 찾을 수 없습니다."));
+            }
+
+            return ResponseEntity.ok(Map.of("message", "성공적으로 수정되었습니다."));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage())); // 닉네임 중복 오류 처리
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", "수정 중 오류가 발생했습니다.", "error", e.getMessage()));
         }
     }
 }

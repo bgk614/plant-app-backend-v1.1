@@ -27,8 +27,21 @@ public class PlantStatusService {
           return plantStatusRepository.findByPlantId(plantId);
      }
 
+     // Status ID로 상태 삭제
      public void deletePlantStatusById(Long statusId) {
-          // ID를 기준으로 삭제
           plantStatusRepository.deleteById(statusId);
+     }
+
+     // 첫 번째 기록 여부 확인
+     public boolean isFirstRecord(Long statusId) {
+          // 주어진 상태 ID에 해당하는 PlantStatus 조회
+          PlantStatus plantStatus = plantStatusRepository.findById(statusId)
+                  .orElseThrow(() -> new IllegalArgumentException("해당 ID의 상태가 존재하지 않습니다."));
+
+          // 해당 Plant와 연결된 가장 오래된 상태 조회
+          PlantStatus oldestStatus = plantStatusRepository.findFirstByPlantOrderByCreatedAtAsc(plantStatus.getPlant());
+
+          // 현재 ID가 가장 오래된 상태의 ID인지 확인
+          return oldestStatus.getId().equals(statusId);
      }
 }

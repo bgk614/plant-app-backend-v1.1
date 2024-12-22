@@ -1,6 +1,5 @@
 package com.example.plantappbackend.model;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -27,7 +26,7 @@ public class PlantStatus {
     @Column
     private String status;
 
-    @Column(name = "image_url")
+    @Column
     private String imageUrl;
 
     @Column(name = "created_at")
